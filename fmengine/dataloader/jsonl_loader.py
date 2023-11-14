@@ -92,3 +92,27 @@ def get_jsonl_dataloader(jsonl_path, tokenizer, args):
         raw_datasets, shuffle=False, collate_fn=data_collator, batch_size=batch_size
     )
     return iter(deepspeed.utils.RepeatingLoader(dataloader))
+
+def get_dataloader_from_hf(data_name, tokenizer, args):
+    data_collator = AutoregressiveLanguageModelDataCollator(tokenizer)
+    ctx_length = args.get("seq_length", 2048) + 1  # +1 for shifting
+    streaming = args.get("streaming", True)
+    seed = args.get("seed", 42)
+    batch_size = args.get("batch_size", 1)
+    
+    def tokenize(examples):
+        examples = tokenizer(examples["text"], truncation=True, max_length=ctx_length)
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        if total_length >= ctx_length:
+            total_length = (total_length // ctx_length) * ctx_length
+        result = {
+            k: [t[i : i + ctx_length] for i in range(0, total_length, ctx_length)]
+            for k, t in concatenated_examples.items()
+        }
+        return result
+    
+    dataset = load_dataset(data_name, split="train", streaming=streaming, token='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')
+    tokenized_dataset = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names).with_format("torch")
+    dataloader = DataLoader(tokenized_dataset, collate_fn=data_collator, batch_size=batch_size)
+    return iter(deepspeed.utils.RepeatingLoader(dataloader))

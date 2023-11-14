@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, asdict
 from fmengine.utils import jload
 from fmengine.trainer.llm_trainer import LLMTrainer
 from fmengine.modeling._common.model import get_model
-from fmengine.dataloader.jsonl_loader import get_jsonl_dataloader
+from fmengine.dataloader.jsonl_loader import get_jsonl_dataloader, get_dataloader_from_hf
 from munch import munchify
 from fmengine.utils.megatron import initialize_megatron
 from fmengine.modeling.llama.patching import patch_llama
@@ -122,15 +122,25 @@ if __name__ == "__main__":
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
     model_config = transformers.AutoConfig.from_pretrained(model_args.init_ckpt)
-
-    train_dataloader = get_jsonl_dataloader(
-        data_args.data_path,
-        tokenizer=tokenizer,
-        args={
-            "seq_length": trainer_args.max_seq_len,
-            "batch_size": data_args.batch_size,
-        },
-    )
+    
+    if data_args.data_path.endswith(".jsonl"):
+        train_dataloader = get_jsonl_dataloader(
+            data_args.data_path,
+            tokenizer=tokenizer,
+            args={
+                "seq_length": trainer_args.max_seq_len,
+                "batch_size": data_args.batch_size,
+            },
+        )
+    else:
+        train_dataloader = get_dataloader_from_hf(
+            data_args.data_path,
+            tokenizer=tokenizer,
+            args={
+                "seq_length": trainer_args.max_seq_len,
+                "batch_size": data_args.batch_size,
+            },
+        )
 
     _tmp = torch.nn.Linear.reset_parameters
     torch.nn.Linear.reset_parameters = lambda x: None
